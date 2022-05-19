@@ -98,7 +98,7 @@ void setup() {
   }
   
   OledPrint();
-  oled.print(F("Скорость и ускорения заданы"));
+  oled.print(F("ГОТОВ!!"));
   delay(500);
   oled.clear();
 
@@ -217,7 +217,22 @@ void WorkingMode(uint8_t x){
     break;
   case 3:
   {
-    isHomeClick = false;
+    int degr[AMOUNT];
+    
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      degr[i] = servos[i].getCurrentDeg();
+    }
+    
+    OledPrint();
+    oled.setScale(1);
+    oled.textMode(BUF_ADD);
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      oled.print(F("Угол:")) + oled.println(degr[i]);
+    }
+    
+    oled.setScale(2);
     PRINT("\nAB", AB);
 
   }
