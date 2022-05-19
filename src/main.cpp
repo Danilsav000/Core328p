@@ -1,10 +1,14 @@
+#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+//#define USE_MICRO_WIRE
 //#include <core.h>
 #include <Arduino.h>
 #include <ServoSmooth.h>
 #include <wire.h>
+//#include <microWire.h>
 #include <GyverOLED.h>
 
-#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+
+const uint16_t data PROGMEM = 125;
 
 #ifdef DEBUG
 #define PRINTS(x) {Serial.print(F(x)); }
@@ -19,18 +23,21 @@
 #define impulsMax 2800  //2600
 
 
-#define servosSpeed 50
-#define servosAccel 0.4
+#define servosSpeed 200
+#define servosAccel 0.5
 
 
 #define homePosition 0
 #define maxDeg 180
 
+#define MY_PERIOD 1000
+uint32_t tmr1; 
+
 ServoSmooth servos[AMOUNT];
-GyverOLED<SSD1306_128x64, OLED_NO_BUFFER> oled;
+GyverOLED<SSD1306_128x64, OLED_NO_BUFFER> oled; 
 
 
-
+int t = 0;
 
 uint8_t AB;
 
@@ -39,14 +46,27 @@ boolean isHomeClick = false;
 boolean isSetPositionClick;
 
 uint8_t GetAB();
+void OledPrint();
+void WorkingMode(uint8_t x);
 
 void setup() {
   Serial.begin(9600);
+  
   PRINTS("version 1.0, arduino nano");
   PRINT("\nServos connected: ", AMOUNT);
   PRINT("\nSet speed: ", servosSpeed);
   PRINT("\nSet accel: ", servosAccel);
   PRINTS("\nНачнем! Нажмите кнопку 'Парковка'");
+
+  oled.init();  // инициализация дисплея
+  oled.clear();
+  oled.autoPrintln(true);
+  oled.home(); //устанавливаем курсор в 0,0
+  oled.setScale(2);
+  oled.print(F("Привет!"));
+  delay(500);
+
+  
   
 
   servos[0].attach(11);
@@ -54,6 +74,12 @@ void setup() {
   servos[2].attach(9);
   servos[3].attach(6);
   servos[4].attach(5);
+  oled.clear();
+  oled.setCursor(20,2);
+  oled.print(F("Приводы подключены"));
+  delay(500);
+
+
 
 
   
@@ -71,10 +97,16 @@ void setup() {
     servos[i].smoothStart();
   }
   
+  OledPrint();
+  oled.print(F("Скорость и ускорения заданы"));
+  delay(500);
+  oled.clear();
 
 }
 
 void loop() {
+  
+  
   
 
   servos[0].tick();
@@ -85,10 +117,14 @@ void loop() {
 
 
 AB = GetAB();
+WorkingMode(AB);
+
+
 
 
 
   if (isHomeClick == true) {
+    
   int pos0 = map(analogRead(A0),0,1023,0,180);
   int pos1 = map(analogRead(A1),0,1023,0,180);
   int pos2 = map(analogRead(A2),0,1023,0,180);
@@ -101,39 +137,9 @@ AB = GetAB();
     servos[4].setTargetDeg(pos4);
   }
 
-  switch (AB)
-  {
-  case 1:
-    
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      servos[i].setTargetDeg(homePosition);
-    }
-    isHomeClick = true;
-    PRINT("\nAB", AB);
-    
-    break;
-  case 2:
-    isSetPositionClick = true;
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      servos[i].setTargetDeg(maxDeg);
-    }
-    PRINT("\nAB", AB);
-      
-    break;
-  case 3:
-    isHomeClick = false;
-    PRINT("\nAB", AB);
-  break;
   
-    
-  default:
-    break;
-  }
 
-   
-
+ 
 
 
 
@@ -164,9 +170,62 @@ uint8_t GetAB() {                                           // Функция у
   else {
     count += 1;                                             // Увеличиваем счетчик
   }
-  if ((count >= 10) && (actualKeyValue != oldKeyValue)) {   // Счетчик преодолел барьер, можно иницировать смену состояний
+  if ((count >= 3) && (actualKeyValue != oldKeyValue)) {   // Счетчик преодолел барьер, можно иницировать смену состояний
     oldKeyValue = actualKeyValue;                           // Присваиваем новое значение
   }
   
   return    oldKeyValue;
+}
+
+void OledPrint() {
+  oled.clear();
+  oled.home();
+
+}
+
+void WorkingMode(uint8_t x){
+  switch (x)
+  {
+  case 1:
+
+  {
+    
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      servos[i].setTargetDeg(homePosition);
+    }
+    isHomeClick = false;
+    PRINT("\nAB", AB);
+    OledPrint();
+    oled.print(1);
+  
+
+  }
+    break;
+  case 2:
+  {
+    isHomeClick = true;
+    PRINT("\nAB", AB);
+    OledPrint();
+    oled.print(F("Manual mode"));
+
+
+
+
+  }
+      
+    break;
+  case 3:
+  {
+    isHomeClick = false;
+    PRINT("\nAB", AB);
+
+  }
+  break;
+  
+    
+  default:
+    break;
+  }
+
 }
