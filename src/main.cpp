@@ -1,4 +1,5 @@
-#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+//#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+#define DRIVER_STEP_TIME 20
 //#define USE_MICRO_WIRE
 //#include <core.h>
 #include <Arduino.h>
@@ -6,6 +7,7 @@
 #include <wire.h>
 //#include <microWire.h>
 #include <GyverOLED.h>
+#include <GyverStepper.h>
 
 
 const uint16_t data PROGMEM = 125;
@@ -15,26 +17,31 @@ const uint16_t data PROGMEM = 125;
 #define PRINT(s,v)  { Serial.print(F(s)); Serial.print(v); }
 #else 
 #define PRINTS(x)
+#define PRINT(s,v)
 #endif
 
+//сервы
 #define AMOUNT 5 // указываем колличество приводов используемых в проекте
 #define BPIN A7
 #define impulsMin  200   //600
 #define impulsMax 2800  //2600
-
-
 #define servosSpeed 200
 #define servosAccel 0.5
-
-
 #define homePosition 0
 #define maxDeg 180
 
 #define MY_PERIOD 1000
+
+//Шаговик
+#define steps 3200
+#define step 8
+#define dir 7
+
 uint32_t tmr1; 
 
 ServoSmooth servos[AMOUNT];
-GyverOLED<SSD1306_128x64, OLED_NO_BUFFER> oled; 
+GyverOLED<SSD1306_128x64, OLED_NO_BUFFER> oled;
+GStepper<STEPPER2WIRE> stepper(steps, step, dir);
 
 
 int t = 0;
@@ -47,7 +54,7 @@ boolean isSetPositionClick;
 
 uint8_t GetAB();
 void OledPrint();
-void WorkingMode(uint8_t x);
+
 
 void setup() {
   Serial.begin(9600);
@@ -102,22 +109,97 @@ void setup() {
   delay(500);
   oled.clear();
 
+ 
+stepper.setRunMode(FOLLOW_POS);
+  stepper.setMaxSpeed(400);
+
+  // установка ускорения в шагах/сек/сек
+  stepper.setAcceleration(500);
+  stepper.autoPower(true);
+
+
 }
 
 void loop() {
   
-  
-  
 
+    
+  
+  
+  
   servos[0].tick();
   servos[1].tick();
   servos[2].tick();
   servos[3].tick();
   servos[4].tick();
-
+/* 
+  if (!stepper.tick()) {
+    static bool direct;
+    direct = !direct;
+    stepper.setTarget(400);
+  }
+ */
 
 AB = GetAB();
-WorkingMode(AB);
+switch (AB)
+  {
+  case 1:
+
+  {
+    
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      servos[i].setTargetDeg(homePosition);
+    }
+    isHomeClick = false;
+    PRINT("\nAB", AB);
+    OledPrint();
+    oled.print(1);
+  
+
+  }
+    break;
+  case 2:
+  {
+    isHomeClick = true;
+    PRINT("\nAB", AB);
+    OledPrint();
+    oled.print(F("Manual mode"));
+
+
+
+
+  }
+      
+    break;
+  case 3:
+  {
+    int degr[AMOUNT];
+    
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      degr[i] = servos[i].getCurrentDeg();
+    }
+    
+    OledPrint();
+    oled.setScale(1);
+    oled.textMode(BUF_ADD);
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      oled.print(F("Угол:")) + oled.println(degr[i]);
+    }
+    
+    oled.setScale(2);
+    PRINT("\nAB", AB);
+
+  }
+  break;
+  
+    
+  default:
+    break;
+  }
+
 
 
 
@@ -184,63 +266,5 @@ void OledPrint() {
 }
 
 void WorkingMode(uint8_t x){
-  switch (x)
-  {
-  case 1:
-
-  {
-    
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      servos[i].setTargetDeg(homePosition);
-    }
-    isHomeClick = false;
-    PRINT("\nAB", AB);
-    OledPrint();
-    oled.print(1);
   
-
-  }
-    break;
-  case 2:
-  {
-    isHomeClick = true;
-    PRINT("\nAB", AB);
-    OledPrint();
-    oled.print(F("Manual mode"));
-
-
-
-
-  }
-      
-    break;
-  case 3:
-  {
-    int degr[AMOUNT];
-    
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      degr[i] = servos[i].getCurrentDeg();
-    }
-    
-    OledPrint();
-    oled.setScale(1);
-    oled.textMode(BUF_ADD);
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      oled.print(F("Угол:")) + oled.println(degr[i]);
-    }
-    
-    oled.setScale(2);
-    PRINT("\nAB", AB);
-
-  }
-  break;
-  
-    
-  default:
-    break;
-  }
-
 }
