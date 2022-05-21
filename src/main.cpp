@@ -1,17 +1,22 @@
-//#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+#define GS_NO_ACCEL // отключить модуль движения с ускорением (уменьшить вес кода)
 #define DRIVER_STEP_TIME 20
 //#define USE_MICRO_WIRE
 //#include <core.h>
 #include <Arduino.h>
+#include <EEPROM.h>
 #include <ServoSmooth.h>
 #include <wire.h>
-//#include <microWire.h>
 #include <GyverOLED.h>
-#include <GyverStepper.h>
+#include <GyverStepper2.h>
 
 
-const uint16_t data PROGMEM = 125;
 
+//работа с памтью EEPROM
+#define INIT_ADDR 1023
+#define INIT_KEY 254
+
+//функции для отладки
 #ifdef DEBUG
 #define PRINTS(x) {Serial.print(F(x)); }
 #define PRINT(s,v)  { Serial.print(F(s)); Serial.print(v); }
@@ -23,28 +28,34 @@ const uint16_t data PROGMEM = 125;
 //сервы
 #define AMOUNT 5 // указываем колличество приводов используемых в проекте
 #define BPIN A7
-#define impulsMin  200   //600
-#define impulsMax 2800  //2600
-#define servosSpeed 200
+#define impulsMin  544  //600
+#define impulsMax 2400  //2600
+#define servosSpeed 500
 #define servosAccel 0.5
-#define homePosition 0
+#define homePosition 180
 #define maxDeg 180
 
+//таймеры
 #define MY_PERIOD 1000
+#define STEPP_PERIOD 60000
+#define BTN_PERIOD 10000
+uint32_t tmr1; 
+uint32_t tmr2; 
 
 //Шаговик
 #define steps 3200
-#define step 8
-#define dir 7
+#define pinStep 8
+#define pinDir 7
+#define pinEnable 12
 
-uint32_t tmr1; 
 
+//объекты сервы, экран, шаговик
 ServoSmooth servos[AMOUNT];
 GyverOLED<SSD1306_128x64, OLED_NO_BUFFER> oled;
-GStepper<STEPPER2WIRE> stepper(steps, step, dir);
+GStepper2<STEPPER2WIRE> stepper(steps, pinStep, pinDir, pinEnable);
 
 
-int t = 0;
+
 
 uint8_t AB;
 
@@ -54,16 +65,59 @@ boolean isSetPositionClick;
 
 uint8_t GetAB();
 void OledPrint();
+void StepperCCW();
+void StepperCW();
+void checkEEPROM();
+void WriteStatusBTN();
+void ManualBTN();
 
+
+uint32_t eepromTimer = 0;
+boolean eepromFlag = false;
+
+int stepperInitialpoint = 0;
+int16_t servo0InitialPoint = 2400;
+int16_t servo1InitialPoint = 2400;
+int16_t servo2InitialPoint = 2400;
+int16_t servo3InitialPoint = 2400;
+int16_t servo4InitialPoint = 2400;
 
 void setup() {
   Serial.begin(9600);
+  //EEPROM.put(254, 10); // раскоментировать чтобы записать начальные значения в EEPROM
+
+    if (EEPROM.read(INIT_ADDR) != INIT_KEY) { // первый запуск
+    EEPROM.write(INIT_ADDR, INIT_KEY);    // записали ключ
+    // записали стандартное значение 
+    // в данном случае это значение переменной
+    EEPROM.put(0, stepperInitialpoint);
+    EEPROM.put(10, servo0InitialPoint);
+    EEPROM.put(20, servo1InitialPoint);
+    EEPROM.put(30, servo2InitialPoint);
+    EEPROM.put(40, servo3InitialPoint);
+    EEPROM.put(50, servo4InitialPoint);
+  }
+
+  EEPROM.get(0, stepperInitialpoint);
+  EEPROM.get(10, servo0InitialPoint);
+  EEPROM.get(20, servo1InitialPoint);
+  EEPROM.get(30, servo2InitialPoint);
+  EEPROM.get(40, servo3InitialPoint);
+  EEPROM.get(50, servo4InitialPoint);
   
-  PRINTS("version 1.0, arduino nano");
+  
+  PRINTS("\nversion 1.0, arduino nano");
   PRINT("\nServos connected: ", AMOUNT);
   PRINT("\nSet speed: ", servosSpeed);
   PRINT("\nSet accel: ", servosAccel);
   PRINTS("\nНачнем! Нажмите кнопку 'Парковка'");
+  PRINT("\nПозиция шаговика: ", stepperInitialpoint);
+  PRINT("\nПозиция Серво 0: ", servo0InitialPoint);
+  PRINT("\nПозиция Серво 1: ", servo1InitialPoint);
+  PRINT("\nПозиция Серво 2: ", servo2InitialPoint);
+  PRINT("\nПозиция Серво 3: ", servo3InitialPoint);
+  PRINT("\nПозиция Серво 4: ", servo4InitialPoint);
+
 
   oled.init();  // инициализация дисплея
   oled.clear();
@@ -73,14 +127,12 @@ void setup() {
   oled.print(F("Привет!"));
   delay(500);
 
-  
-  
 
-  servos[0].attach(11);
-  servos[1].attach(10);
-  servos[2].attach(9);
-  servos[3].attach(6);
-  servos[4].attach(5);
+  servos[0].attach(11, impulsMin, impulsMax, servo0InitialPoint);
+  servos[1].attach(10, impulsMin, impulsMax, servo1InitialPoint);
+  servos[2].attach(9, impulsMin, impulsMax, servo2InitialPoint);
+  servos[3].attach(6, impulsMin, impulsMax, servo3InitialPoint);
+  servos[4].attach(5, impulsMin, impulsMax, servo4InitialPoint);
   oled.clear();
   oled.setCursor(20,2);
   oled.print(F("Приводы подключены"));
@@ -88,111 +140,96 @@ void setup() {
 
 
 
-
-  
-  
-  //servos[0].attach(11, impulsMin, impulsMax);
-  //servos[1].attach(10, impulsMin, impulsMax);
-  //servos[2].attach(9, impulsMin, impulsMax);
-  //servos[3].attach(6, impulsMin, impulsMax);
-  //servos[4].attach(5, impulsMin, impulsMax);
-
   for (int i = 0; i < AMOUNT; i++)
   {
     servos[i].setAccel(servosAccel);
     servos[i].setSpeed(servosSpeed);
-    servos[i].smoothStart();
+    //servos[i].smoothStart();
   }
   
   OledPrint();
-  oled.print(F("ГОТОВ!!"));
+  oled.print(F("ГОТОВ!!!"));
   delay(500);
   oled.clear();
 
  
-stepper.setRunMode(FOLLOW_POS);
-  stepper.setMaxSpeed(400);
 
-  // установка ускорения в шагах/сек/сек
+  stepper.setMaxSpeed(400); 
   stepper.setAcceleration(500);
-  stepper.autoPower(true);
+  stepper.setCurrent(stepperInitialpoint);
+  stepper.setTarget(0, ABSOLUTE); 
+  
+  
+  //stepper.autoPower(true);
 
 
 }
 
 void loop() {
-  
 
-    
-  
-  
-  
   servos[0].tick();
   servos[1].tick();
   servos[2].tick();
   servos[3].tick();
   servos[4].tick();
-/* 
-  if (!stepper.tick()) {
-    static bool direct;
-    direct = !direct;
-    stepper.setTarget(400);
+  stepper.tick();
+
+  if (millis() - tmr2 >= STEPP_PERIOD)
+  {
+      tmr2 = millis();
+      stepper.disable();
   }
- */
+  
+  if (isHomeClick == true) {
+    
+  int pos0 = map(analogRead(A0),0,1023,impulsMin,impulsMax);
+  int pos1 = map(analogRead(A1),0,1023,impulsMin,impulsMax);
+  int pos2 = map(analogRead(A2),0,1023,impulsMin,impulsMax);
+  int pos3 = map(analogRead(A3),0,1023,impulsMin,impulsMax);
+  int pos4 = map(analogRead(A6),0,1023,impulsMin,impulsMax);
+    servos[0].setTarget(pos0);
+    servos[1].setTarget(pos1);
+    servos[2].setTarget(pos2);
+    servos[3].setTarget(pos3);
+    servos[4].setTarget(pos4);
+  }
 
 AB = GetAB();
 switch (AB)
   {
   case 1:
-
   {
-    
     for (int i = 0; i < AMOUNT; i++)
     {
-      servos[i].setTargetDeg(homePosition);
+      servos[i].setTarget(2600);
     }
     isHomeClick = false;
     PRINT("\nAB", AB);
     OledPrint();
     oled.print(1);
-  
-
   }
     break;
   case 2:
   {
-    isHomeClick = true;
-    PRINT("\nAB", AB);
-    OledPrint();
-    oled.print(F("Manual mode"));
-
-
-
-
+    ManualBTN();
   }
       
     break;
   case 3:
   {
-    int degr[AMOUNT];
-    
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      degr[i] = servos[i].getCurrentDeg();
-    }
-    
-    OledPrint();
-    oled.setScale(1);
-    oled.textMode(BUF_ADD);
-    for (int i = 0; i < AMOUNT; i++)
-    {
-      oled.print(F("Угол:")) + oled.println(degr[i]);
-    }
-    
-    oled.setScale(2);
-    PRINT("\nAB", AB);
-
+    WriteStatusBTN();
   }
+  break;
+
+  case 4: {
+    StepperCCW();
+  }
+  break;
+
+    case 5: {
+    StepperCW();
+  }
+  
   break;
   
     
@@ -205,39 +242,88 @@ switch (AB)
 
 
 
-  if (isHomeClick == true) {
+
+  
+}
+
+void checkEEPROM() {
+
+    //stepperInitialpoint = stepper.getCurrent();
+    EEPROM.put(0, stepper.getCurrent());     // записали в EEPROM текущее положение двигателя
+    EEPROM.put(10, servos[0].getCurrent());
+    EEPROM.put(20, servos[1].getCurrent());
+    EEPROM.put(30, servos[2].getCurrent());
+    EEPROM.put(40, servos[3].getCurrent());
+    EEPROM.put(50, servos[4].getCurrent());
     
-  int pos0 = map(analogRead(A0),0,1023,0,180);
-  int pos1 = map(analogRead(A1),0,1023,0,180);
-  int pos2 = map(analogRead(A2),0,1023,0,180);
-  int pos3 = map(analogRead(A3),0,1023,0,180);
-  int pos4 = map(analogRead(A6),0,1023,0,180);
-    servos[0].setTargetDeg(pos0);
-    servos[1].setTargetDeg(pos1);
-    servos[2].setTargetDeg(pos2);
-    servos[3].setTargetDeg(pos3);
-    servos[4].setTargetDeg(pos4);
   }
 
+
+void ManualBTN(){
+    isHomeClick = true;
+    PRINT("\nAB", AB);
+    OledPrint();
+    oled.print(F("Manual mode"));
+}
+
+void WriteStatusBTN(){
+  int degr[AMOUNT];
+
+    if (millis() - tmr1 >= MY_PERIOD) {
+      tmr1 = millis(); 
+      for (int i = 0; i < AMOUNT; i++)
+    {
+      degr[i] = servos[i].getCurrent();
+    }
+    
+    OledPrint();
+    oled.setScale(1);
+    oled.textMode(BUF_ADD);
+    for (int i = 0; i < AMOUNT; i++)
+    {
+      oled.print(F("Позиция:")) + oled.println(degr[i]);
+    }
+    oled.print(F("Motor: ")) + oled.print(stepper.getCurrent());
+    oled.setScale(2);
+    PRINT("\nAB", AB);
+
+    checkEEPROM();
+    PRINT("\nПозиция шаговика: ", stepperInitialpoint);
+    }  
+}
+
+void StepperCCW(){
+  if (stepper.ready())
+  {
+    stepper.enable();
+    stepper.setTarget(100, RELATIVE);
+  }
+
+   if (millis() - tmr1 >= BTN_PERIOD) {
+      tmr1 = millis(); 
+      OledPrint();
+      oled.print(F("<<<<<>>>>>"));
+      PRINT("\nПозиция шаговика: ", stepper.pos);
+    }
+
   
-
- 
-
-
-
-  //int pos1 = analogRead(A0);
-  //pos1 = map(pos1,0,1023,0,180);
-  //int pos2 = map(analogRead(A1),0,1023,0,180);
-  //int pos3 = map(analogRead(A2),0,1023,0,180);
-  //int pos4 = map(analogRead(A3),0,1023,0,180);
-  //int pos5 = map(analogRead(A6),0,1023,0,180);
-  //servos[0].setTargetDeg(pos1);
-  //servos[1].setTargetDeg(pos2);
-  //servos[2].setTargetDeg(pos3);
-  //servos[3].setTargetDeg(pos4);
-  //servos[4].setTargetDeg(pos5);
-
   
+}
+
+void StepperCW(){
+    if (stepper.ready())
+  {
+    stepper.enable();
+    stepper.setTarget(-100, RELATIVE);
+  }
+
+    if (millis() - tmr1 >= BTN_PERIOD) {
+    tmr1 = millis();
+    OledPrint();
+    oled.print(F("<<<<<>>>>>"));
+    PRINT("\nПозиция шаговика: ", stepper.pos);
+    }
+
 }
 
 uint8_t GetAB() {                                           // Функция устраняющая дребезг
@@ -265,6 +351,3 @@ void OledPrint() {
 
 }
 
-void WorkingMode(uint8_t x){
-  
-}
