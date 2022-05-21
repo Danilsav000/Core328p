@@ -37,7 +37,7 @@
 
 //таймеры
 #define MY_PERIOD 1000
-#define STEPP_PERIOD 60000
+#define STEPP_PERIOD 5000
 #define BTN_PERIOD 10000
 uint32_t tmr1; 
 uint32_t tmr2; 
@@ -152,17 +152,13 @@ void setup() {
   delay(500);
   oled.clear();
 
- 
-
   stepper.setMaxSpeed(400); 
   stepper.setAcceleration(500);
   stepper.setCurrent(stepperInitialpoint);
   stepper.setTarget(0, ABSOLUTE); 
   
   
-  //stepper.autoPower(true);
-
-
+  stepper.autoPower(true);
 }
 
 void loop() {
@@ -203,6 +199,8 @@ switch (AB)
     {
       servos[i].setTarget(2600);
     }
+
+
     isHomeClick = false;
     PRINT("\nAB", AB);
     OledPrint();
