@@ -1,4 +1,4 @@
-#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
+//#define DEBUG  //Раскоментировать чтобы включить отладку по уарт
 #define GS_NO_ACCEL // отключить модуль движения с ускорением (уменьшить вес кода)
 #define DRIVER_STEP_TIME 20
 //#define USE_MICRO_WIRE
@@ -9,6 +9,7 @@
 #include <wire.h>
 #include <GyverOLED.h>
 #include <GyverStepper2.h>
+#include <GyverWDT.h>
 
 
 
@@ -28,9 +29,9 @@
 //сервы
 #define AMOUNT 5 // указываем колличество приводов используемых в проекте
 #define BPIN A7
-#define impulsMin  544  //600
-#define impulsMax 2400  //2600
-#define servosSpeed 500
+#define impulsMin  500  //600
+#define impulsMax 2400 //2600
+#define servosSpeed 100
 #define servosAccel 0.5
 #define homePosition 180
 #define maxDeg 180
@@ -41,6 +42,7 @@
 #define BTN_PERIOD 10000
 uint32_t tmr1; 
 uint32_t tmr2; 
+uint32_t tmr3;
 
 //Шаговик
 #define steps 3200
@@ -70,7 +72,7 @@ void StepperCW();
 void checkEEPROM();
 void WriteStatusBTN();
 void ManualBTN();
-
+void CaptureSerial();
 
 uint32_t eepromTimer = 0;
 boolean eepromFlag = false;
@@ -82,8 +84,22 @@ int16_t servo2InitialPoint = 2400;
 int16_t servo3InitialPoint = 2400;
 int16_t servo4InitialPoint = 2400;
 
+#define numOfValsRec 5
+#define digitsPerValRec 1
+int valsRec[numOfValsRec];
+int stringLength = numOfValsRec * digitsPerValRec + 1; //$00000
+int counter = 0;
+bool countStart = false;
+String receivedString;
+
+char ch;
+char res;
+ 
+
 void setup() {
+
   Serial.begin(9600);
+  Serial.setTimeout(10);
   //EEPROM.put(254, 10); // раскоментировать чтобы записать начальные значения в EEPROM
 
     if (EEPROM.read(INIT_ADDR) != INIT_KEY) { // первый запуск
@@ -110,7 +126,7 @@ void setup() {
   PRINT("\nServos connected: ", AMOUNT);
   PRINT("\nSet speed: ", servosSpeed);
   PRINT("\nSet accel: ", servosAccel);
-  PRINTS("\nНачнем! Нажмите кнопку 'Парковка'");
+  PRINTS("\nНачнем!");
   PRINT("\nПозиция шаговика: ", stepperInitialpoint);
   PRINT("\nПозиция Серво 0: ", servo0InitialPoint);
   PRINT("\nПозиция Серво 1: ", servo1InitialPoint);
@@ -144,6 +160,7 @@ void setup() {
   {
     servos[i].setAccel(servosAccel);
     servos[i].setSpeed(servosSpeed);
+    //servos[i].setMaxAngle(maxDeg);
     //servos[i].smoothStart();
   }
   
@@ -161,6 +178,55 @@ void setup() {
   stepper.autoPower(true);
 }
 
+/* void receivedData(){
+  while (Serial.available())
+  {
+    char ch = Serial.read();
+    if (ch=='$')
+    {
+      countStart = true;
+    }
+
+    if (countStart) {
+      if (counter < stringLength)
+      {
+        receivedString = String(receivedString + ch);
+        counter++;
+      }
+      if (counter >= stringLength)
+      {
+        for (int i = 0; i < numOfValsRec; i++)
+        {
+          int num = (i * digitsPerValRec) + 1;
+          valsRec[0] = receivedString.substring(num,num + digitsPerValRec).toInt(); 
+        }
+        receivedString = "";
+        counter = 0;
+        countStart = false;
+        
+        
+      }
+      
+      
+    }
+    
+    
+  }
+  
+}
+ */
+ char receivedData(){
+ if (Serial.available())
+  {
+    ch = Serial.read();
+    oled.print(ch);
+  }
+    return ch;
+  }
+
+  
+
+
 void loop() {
 
   servos[0].tick();
@@ -170,12 +236,38 @@ void loop() {
   servos[4].tick();
   stepper.tick();
 
+  
+  /* if (Serial.available())
+  {
+    ch = Serial.read();
+    oled.print(ch);
+  } */
+
+  res = receivedData();
+
+  if (res=='L')
+  {
+    servos[0].setTarget(impulsMax);
+  }
+  
+  
+
+  
+  //if (valsRec[0] == 1){servos[0].setTarget(impulsMax);} else {servos[0].setTarget(impulsMin);}
+
+
+  
+  
+
+
+
   if (millis() - tmr2 >= STEPP_PERIOD)
   {
       tmr2 = millis();
       stepper.disable();
   }
-  
+  if (millis() - tmr3 >= 40) {
+    tmr3 = millis();
   if (isHomeClick == true) {
     
   int pos0 = map(analogRead(A0),0,1023,impulsMin,impulsMax);
@@ -189,12 +281,14 @@ void loop() {
     servos[3].setTarget(pos3);
     servos[4].setTarget(pos4);
   }
+  }
 
 AB = GetAB();
 switch (AB)
   {
   case 1:
   {
+    CaptureSerial();
     for (int i = 0; i < AMOUNT; i++)
     {
       servos[i].setTarget(2600);
@@ -257,7 +351,19 @@ void checkEEPROM() {
   }
 
 
+void CaptureSerial(){
+
+  
+}
+
 void ManualBTN(){
+    if (Serial.available() > 0)
+    {
+      Serial.end();
+      OledPrint();
+      oled.print("Serial off");
+    }
+    
     isHomeClick = true;
     PRINT("\nAB", AB);
     OledPrint();
