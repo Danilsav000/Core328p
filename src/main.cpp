@@ -43,6 +43,8 @@
 uint32_t tmr1; 
 uint32_t tmr2; 
 uint32_t tmr3;
+uint32_t tmr_stp;
+uint32_t tmr_oled;
 
 //Шаговик
 #define steps 3200
@@ -62,8 +64,8 @@ GStepper2<STEPPER2WIRE> stepper(steps, pinStep, pinDir, pinEnable);
 uint8_t AB;
 
 
-boolean isHomeClick = false;
-boolean isSetPositionClick;
+boolean isRepeatTrue = false;
+boolean isManualClick = false;
 
 uint8_t GetAB();
 void OledPrint();
@@ -72,7 +74,6 @@ void StepperCW();
 void checkEEPROM();
 void WriteStatusBTN();
 void ManualBTN();
-void CaptureSerial();
 
 uint32_t eepromTimer = 0;
 boolean eepromFlag = false;
@@ -172,7 +173,7 @@ void setup() {
   stepper.setMaxSpeed(400); 
   stepper.setAcceleration(500);
   stepper.setCurrent(stepperInitialpoint);
-  stepper.setTarget(0, ABSOLUTE); 
+  stepper.setTarget(servo0InitialPoint, ABSOLUTE); 
   
   
   stepper.autoPower(true);
@@ -216,18 +217,30 @@ void setup() {
 }
  */
  char receivedData(){
- if (Serial.available())
-  {
-    ch = Serial.read();
+  if (millis() - tmr_stp >= 40) {
+    tmr3 = millis();
+    if (Serial.available()) {
+      ch = Serial.read();
+    }
+
+    oled.setCursor(60,2);
     oled.print(ch);
-  }
+    oled.update();
+    
     return ch;
   }
-
+ }
   
-
+uint32_t movementStepper(uint32_t step){
+  if (!stepper.ready()){
+    stepper.enable();
+    stepper.setTarget(-step, RELATIVE);
+  }
+  
+}
 
 void loop() {
+
 
   servos[0].tick();
   servos[1].tick();
@@ -243,13 +256,43 @@ void loop() {
     oled.print(ch);
   } */
 
-  res = receivedData();
-
-  if (res=='L')
+  if (isRepeatTrue==true)
   {
-    servos[0].setTarget(impulsMax);
+    res = receivedData();
   }
   
+  
+
+  switch (res)
+  {
+
+  case 'L':{
+      movementStepper(-100);
+    }
+    break;
+  case 'R':{
+      movementStepper(100);
+    }
+    break;
+  case 'M':{
+    stepper.disable();
+    break;
+
+  case 'C':{
+    servos[0].setTarget(impulsMax);
+  }
+  break;
+
+  case 'O':{
+    servos[0].setTarget(impulsMin);
+  }
+  break;
+  default:
+    break;
+  }
+  }
+
+
   
 
   
@@ -266,20 +309,19 @@ void loop() {
       tmr2 = millis();
       stepper.disable();
   }
-  if (millis() - tmr3 >= 40) {
-    tmr3 = millis();
-  if (isHomeClick == true) {
-    
-  int pos0 = map(analogRead(A0),0,1023,impulsMin,impulsMax);
-  int pos1 = map(analogRead(A1),0,1023,impulsMin,impulsMax);
-  int pos2 = map(analogRead(A2),0,1023,impulsMin,impulsMax);
-  int pos3 = map(analogRead(A3),0,1023,impulsMin,impulsMax);
-  int pos4 = map(analogRead(A6),0,1023,impulsMin,impulsMax);
-    servos[0].setTarget(pos0);
-    servos[1].setTarget(pos1);
-    servos[2].setTarget(pos2);
-    servos[3].setTarget(pos3);
-    servos[4].setTarget(pos4);
+  if (isManualClick == true) {
+    if (millis() - tmr3 >= 40) {
+      tmr3 = millis();
+      int pos0 = map(analogRead(A0),0,1023,impulsMin,impulsMax);
+      int pos1 = map(analogRead(A1),0,1023,impulsMin,impulsMax);
+      int pos2 = map(analogRead(A2),0,1023,impulsMin,impulsMax);
+      int pos3 = map(analogRead(A3),0,1023,impulsMin,impulsMax);
+      int pos4 = map(analogRead(A6),0,1023,impulsMin,impulsMax);
+      servos[0].setTarget(pos0);
+      servos[1].setTarget(pos1);
+      servos[2].setTarget(pos2);
+      servos[3].setTarget(pos3);
+      servos[4].setTarget(pos4);
   }
   }
 
@@ -288,21 +330,22 @@ switch (AB)
   {
   case 1:
   {
-    CaptureSerial();
     for (int i = 0; i < AMOUNT; i++)
     {
       servos[i].setTarget(2600);
     }
 
-
-    isHomeClick = false;
+    isManualClick = false;
+    isRepeatTrue = true;
     PRINT("\nAB", AB);
     OledPrint();
-    oled.print(1);
+    oled.print(F("Auto"));
   }
     break;
   case 2:
   {
+  
+    
     ManualBTN();
   }
       
@@ -314,12 +357,19 @@ switch (AB)
   break;
 
   case 4: {
-    StepperCCW();
+      if (isManualClick==true)
+    {
+      StepperCCW();
+    }
+    
   }
   break;
 
     case 5: {
+      if (isManualClick==true)
+    {
     StepperCW();
+    }
   }
   
   break;
@@ -351,20 +401,13 @@ void checkEEPROM() {
   }
 
 
-void CaptureSerial(){
-
-  
-}
-
 void ManualBTN(){
-    if (Serial.available() > 0)
+    if (Serial.available())
     {
       Serial.end();
-      OledPrint();
-      oled.print("Serial off");
     }
-    
-    isHomeClick = true;
+    isRepeatTrue = false;
+    isManualClick = true;
     PRINT("\nAB", AB);
     OledPrint();
     oled.print(F("Manual mode"));
@@ -397,36 +440,30 @@ void WriteStatusBTN(){
 }
 
 void StepperCCW(){
-  if (stepper.ready())
+  if (!stepper.ready())
   {
     stepper.enable();
     stepper.setTarget(100, RELATIVE);
   }
 
-   if (millis() - tmr1 >= BTN_PERIOD) {
-      tmr1 = millis(); 
-      OledPrint();
-      oled.print(F("<<<<<>>>>>"));
+
       PRINT("\nПозиция шаговика: ", stepper.pos);
-    }
+    
 
   
   
 }
 
 void StepperCW(){
-    if (stepper.ready())
+    if (!stepper.ready())
   {
     stepper.enable();
     stepper.setTarget(-100, RELATIVE);
   }
 
-    if (millis() - tmr1 >= BTN_PERIOD) {
-    tmr1 = millis();
-    OledPrint();
-    oled.print(F("<<<<<>>>>>"));
+
     PRINT("\nПозиция шаговика: ", stepper.pos);
-    }
+    
 
 }
 
