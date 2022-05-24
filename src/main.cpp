@@ -179,43 +179,6 @@ void setup() {
   stepper.autoPower(true);
 }
 
-/* void receivedData(){
-  while (Serial.available())
-  {
-    char ch = Serial.read();
-    if (ch=='$')
-    {
-      countStart = true;
-    }
-
-    if (countStart) {
-      if (counter < stringLength)
-      {
-        receivedString = String(receivedString + ch);
-        counter++;
-      }
-      if (counter >= stringLength)
-      {
-        for (int i = 0; i < numOfValsRec; i++)
-        {
-          int num = (i * digitsPerValRec) + 1;
-          valsRec[0] = receivedString.substring(num,num + digitsPerValRec).toInt(); 
-        }
-        receivedString = "";
-        counter = 0;
-        countStart = false;
-        
-        
-      }
-      
-      
-    }
-    
-    
-  }
-  
-}
- */
  char receivedData(){
   if (millis() - tmr_stp >= 40) {
     tmr3 = millis();
@@ -223,9 +186,9 @@ void setup() {
       ch = Serial.read();
     }
 
-    oled.setCursor(60,2);
-    oled.print(ch);
-    oled.update();
+    //oled.setCursor(60,2);
+    //oled.print(ch);
+    //oled.update();
     
     return ch;
   }
@@ -249,12 +212,7 @@ void loop() {
   servos[4].tick();
   stepper.tick();
 
-  
-  /* if (Serial.available())
-  {
-    ch = Serial.read();
-    oled.print(ch);
-  } */
+
 
   if (isRepeatTrue==true)
   {
@@ -266,31 +224,66 @@ void loop() {
   switch (res)
   {
 
-  case 'L':{
-      movementStepper(-100);
+    case 'L':{
+        movementStepper(-100);
+      }
+      break;
+    case 'R':{
+        movementStepper(100);
+      }
+      break;
+    case 'S':{
+      stepper.disable();
+      break;
+    }
+    case 'C':{
+      servos[0].setTarget(impulsMax);
     }
     break;
-  case 'R':{
-      movementStepper(100);
+
+    case 'O':{
+      servos[0].setTarget(impulsMin);
     }
     break;
-  case 'M':{
-    stepper.disable();
+
+    case 'U':{
+      int up = servos[4].getCurrent();
+      servos[4].setTarget(up + 100);
+    }
     break;
 
-  case 'C':{
-    servos[0].setTarget(impulsMax);
-  }
-  break;
+    case 'D':{
+      int down = servos[4].getCurrent();
+      servos[4].setTarget(down - 100);
+    }
+    break;
 
-  case 'O':{
-    servos[0].setTarget(impulsMin);
-  }
-  break;
+    case 'u':{
+      int up2 = servos[3].getCurrent();
+      servos[3].setTarget(up2 + 100);
+    }
+    break;
+
+    case 'd':{
+      int down2 = servos[3].getCurrent();
+      servos[3].setTarget(down2 - 100);
+    }
+    break;
+    case 'x':{
+      int up3 = servos[2].getCurrent();
+      servos[2].setTarget(up3 + 100);
+    }
+    break;
+
+    case 'y':{
+      int down3 = servos[2].getCurrent();
+      servos[2].setTarget(down3 - 100);
+    }
+    break;
   default:
     break;
   }
-  }
+  
 
 
   
