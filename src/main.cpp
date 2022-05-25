@@ -10,6 +10,7 @@
 #include <GyverOLED.h>
 #include <GyverStepper2.h>
 #include <GyverWDT.h>
+#include "myCycle.h"
 
 
 
@@ -71,7 +72,7 @@ uint8_t GetAB();
 void OledPrint();
 void StepperCCW();
 void StepperCW();
-void checkEEPROM();
+void writingEEPROM();
 void WriteStatusBTN();
 void ManualBTN();
 
@@ -95,7 +96,10 @@ String receivedString;
 
 char ch;
 char res;
- 
+
+unsigned long timer10s;
+unsigned long timeSec;
+unsigned long cycle5s;
 
 void setup() {
 
@@ -183,13 +187,7 @@ void setup() {
   if (millis() - tmr_stp >= 40) {
     tmr3 = millis();
     if (Serial.available()) {
-      ch = Serial.read();
-    }
-
-    //oled.setCursor(60,2);
-    //oled.print(ch);
-    //oled.update();
-    
+      ch = Serial.read(); }
     return ch;
   }
  }
@@ -202,7 +200,32 @@ uint32_t movementStepper(uint32_t step){
   
 }
 
+void timersInit() {
+  unsigned long uptimeSec = millis() / 1000;
+  timer10s  = uptimeSec; 
+}
+
+void timersWorks() {
+  timeSec = millis() / 1000;
+    if (timeSec - timer10s  >=  10)  {timer10s  = timeSec; cycle5s  = true;}
+  }
+
+
+void eraseCycles() {
+
+  cycle5s  = false;
+
+}
+
+
 void loop() {
+
+  timersWorks();
+  
+  // Код системных процессов
+
+  
+
 
 
   servos[0].tick();
@@ -212,6 +235,7 @@ void loop() {
   servos[4].tick();
   stepper.tick();
 
+  if (cycle5s){writingEEPROM(); oled.home();oled.print(F("Saved"));}
 
 
   if (isRepeatTrue==true)
@@ -376,12 +400,12 @@ switch (AB)
 
 
 
-
+eraseCycles();
 
   
 }
 
-void checkEEPROM() {
+void writingEEPROM() {
 
     //stepperInitialpoint = stepper.getCurrent();
     EEPROM.put(0, stepper.getCurrent());     // записали в EEPROM текущее положение двигателя
@@ -427,7 +451,7 @@ void WriteStatusBTN(){
     oled.setScale(2);
     PRINT("\nAB", AB);
 
-    checkEEPROM();
+    writingEEPROM();
     PRINT("\nПозиция шаговика: ", stepperInitialpoint);
     }  
 }
