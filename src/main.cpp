@@ -86,13 +86,6 @@ int16_t servo2InitialPoint = 2400;
 int16_t servo3InitialPoint = 2400;
 int16_t servo4InitialPoint = 2400;
 
-#define numOfValsRec 5
-#define digitsPerValRec 1
-int valsRec[numOfValsRec];
-int stringLength = numOfValsRec * digitsPerValRec + 1; //$00000
-int counter = 0;
-bool countStart = false;
-String receivedString;
 
 char ch;
 char res;
@@ -100,6 +93,7 @@ char res;
 unsigned long timer10s;
 unsigned long timeSec;
 unsigned long cycle5s;
+unsigned long cycle10s;
 
 void setup() {
 
@@ -149,8 +143,8 @@ void setup() {
   delay(500);
 
 
-  servos[0].attach(11, impulsMin, impulsMax, servo0InitialPoint);
-  servos[1].attach(10, impulsMin, impulsMax, servo1InitialPoint);
+  servos[0].attach(11, 950, 2400, servo0InitialPoint);
+  servos[1].attach(10, 1000, 2000, servo1InitialPoint);
   servos[2].attach(9, impulsMin, impulsMax, servo2InitialPoint);
   servos[3].attach(6, impulsMin, impulsMax, servo3InitialPoint);
   servos[4].attach(5, impulsMin, impulsMax, servo4InitialPoint);
@@ -165,7 +159,7 @@ void setup() {
   {
     servos[i].setAccel(servosAccel);
     servos[i].setSpeed(servosSpeed);
-    //servos[i].setMaxAngle(maxDeg);
+    servos[i].setMaxAngle(maxDeg);
     //servos[i].smoothStart();
   }
   
@@ -207,13 +201,13 @@ void timersInit() {
 
 void timersWorks() {
   timeSec = millis() / 1000;
-    if (timeSec - timer10s  >=  10)  {timer10s  = timeSec; cycle5s  = true;}
+    if (timeSec - timer10s  >=  20)  {timer10s  = timeSec; cycle10s  = true;}
   }
 
 
 void eraseCycles() {
 
-  cycle5s  = false;
+  cycle10s  = false;
 
 }
 
@@ -235,7 +229,7 @@ void loop() {
   servos[4].tick();
   stepper.tick();
 
-  if (cycle5s){writingEEPROM(); oled.home();oled.print(F("Saved"));}
+  //if (cycle10s){writingEEPROM(); oled.home();oled.print(F("Saved"));}
 
 
   if (isRepeatTrue==true)
@@ -247,6 +241,7 @@ void loop() {
 
   switch (res)
   {
+
 
     case 'L':{
         movementStepper(-100);
@@ -260,19 +255,24 @@ void loop() {
       stepper.disable();
       break;
     }
-    case 'C':{
-      servos[0].setTarget(impulsMax);
+    case 'C': {
+      int close = servos[0].getCurrent();
+      if (close <= 950){break;}
+      servos[0].setTarget(close - 100);
+      
     }
-    break;
-
-    case 'O':{
-      servos[0].setTarget(impulsMin);
-    }
+        break;
+      
+    case 'O': {
+      int open = servos[0].getCurrent();
+      if (open >= 2400){break;}
+      servos[0].setTarget(open + 50);
+  }
     break;
 
     case 'U':{
       int up = servos[4].getCurrent();
-      servos[4].setTarget(up + 100);
+      servos[4].setTarget(up + 50);
     }
     break;
 
@@ -294,32 +294,20 @@ void loop() {
     }
     break;
     case 'x':{
-      int up3 = servos[2].getCurrent();
-      servos[2].setTarget(up3 + 100);
+      int left = servos[1].getCurrent();
+      servos[1].setTarget(left + 50);
     }
     break;
 
     case 'y':{
-      int down3 = servos[2].getCurrent();
-      servos[2].setTarget(down3 - 100);
+      int right = servos[1].getCurrent();
+      servos[1].setTarget(right - 50);
     }
     break;
   default:
     break;
   }
   
-
-
-  
-
-  
-  //if (valsRec[0] == 1){servos[0].setTarget(impulsMax);} else {servos[0].setTarget(impulsMin);}
-
-
-  
-  
-
-
 
   if (millis() - tmr2 >= STEPP_PERIOD)
   {
@@ -329,7 +317,7 @@ void loop() {
   if (isManualClick == true) {
     if (millis() - tmr3 >= 40) {
       tmr3 = millis();
-      int pos0 = map(analogRead(A0),0,1023,impulsMin,impulsMax);
+      int pos0 = map(analogRead(A0),0,1023,950,2400);
       int pos1 = map(analogRead(A1),0,1023,impulsMin,impulsMax);
       int pos2 = map(analogRead(A2),0,1023,impulsMin,impulsMax);
       int pos3 = map(analogRead(A3),0,1023,impulsMin,impulsMax);
